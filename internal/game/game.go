@@ -4,6 +4,7 @@ package game
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -66,7 +67,11 @@ var (
 	ErrGameOver  = errors.New("game is over")
 	ErrTooShort  = errors.New("not enough letters")
 	ErrNotInList = errors.New("not in word list")
+	ErrNoHints   = errors.New("no hints left")
 )
+
+// MaxHints is how many letters Hint may reveal in one game.
+const MaxHints = 3
 
 // HardModeError explains which hard-mode rule a guess broke.
 type HardModeError struct{ msg string }
@@ -79,6 +84,7 @@ type Game struct {
 	MaxGuesses int
 	Hard       bool
 	Guesses    []Guess
+	Hints      []int // positions revealed by Hint, in order
 
 	isValid func(string) bool
 }
@@ -146,8 +152,54 @@ func (g *Game) checkHard(word string) error {
 	return nil
 }
 
-// Letters returns the best mark seen for each letter a-z, for colouring a
-// keyboard.
+// Hint reveals the target letter at a random position, preferring positions
+// no guess has turned green yet. pick(n) must return a number in [0, n).
+// It returns the revealed position, or ErrNoHints after MaxHints reveals.
+func (g *Game) Hint(pick func(n int) int) (int, error) {
+	if g.Status() != Playing {
+		return 0, ErrGameOver
+	}
+	if len(g.Hints) >= MaxHints {
+		return 0, ErrNoHints
+	}
+	var unsolved, unhinted []int
+	for i := range len(g.Target) {
+		if g.Hinted(i) {
+			continue
+		}
+		unhinted = append(unhinted, i)
+		if !g.solved(i) {
+			unsolved = append(unsolved, i)
+		}
+	}
+	candidates := unsolved
+	if len(candidates) == 0 {
+		candidates = unhinted
+	}
+	i := candidates[pick(len(candidates))]
+	g.Hints = append(g.Hints, i)
+	return i, nil
+}
+
+// Hinted reports whether position i was revealed by Hint.
+func (g *Game) Hinted(i int) bool { return slices.Contains(g.Hints, i) }
+
+// solved reports whether any guess has the correct letter at position i.
+func (g *Game) solved(i int) bool {
+	for _, gs := range g.Guesses {
+		if gs.Marks[i] == Correct {
+			return true
+		}
+	}
+	return false
+}
+
+// Letters returns the best mark known for each letter a-z, from guesses and
+// hints, for colouring a keyboard.
+//
+// A hinted letter is only Correct once every occurrence of it in the target
+// is hinted or solved; until then it is Present, so hinting the first T of
+// "truth" doesn't hide that there's another T to find.
 func (g *Game) Letters() [26]Mark {
 	var best [26]Mark
 	for _, gs := range g.Guesses {
@@ -155,6 +207,17 @@ func (g *Game) Letters() [26]Mark {
 			c := gs.Word[i] - 'a'
 			best[c] = max(best[c], m)
 		}
+	}
+	for _, i := range g.Hints {
+		c := g.Target[i]
+		m := Correct
+		for j := range len(g.Target) {
+			if g.Target[j] == c && !g.Hinted(j) && !g.solved(j) {
+				m = Present
+				break
+			}
+		}
+		best[c-'a'] = max(best[c-'a'], m)
 	}
 	return best
 }

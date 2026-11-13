@@ -12,11 +12,21 @@ go build && ./gordle
 |---|---|
 | `-random` | play a random word instead of today's daily puzzle |
 | `-hard` | hard mode: greens must stay put, yellows must be reused |
+| `-cheat` | casual mode: reveal up to 3 letters with `?` (disables sharing) |
 | `-colorblind` | orange/blue instead of green/yellow |
 | `-no-mouse` | don't enable mouse reporting |
 
-Type letters, `Enter` to submit, `Backspace` to delete, `Esc` to quit. After a
-game: `n` new random game, `s` copy the result grid to the clipboard, `q` quit.
+Type letters, `Enter` to submit, `Backspace` to delete, `Ctrl+R` to restart
+with a new random word, `Esc` to quit. After a game: `r` new random game, `s`
+copy the result grid to the clipboard, `q` quit.
+
+### Cheat mode
+
+With `-cheat`, a `?` button sits beside the row you're typing. Click it or
+press `?` to reveal a correct letter in a random position you haven't solved
+yet. It turns green on the board and keyboard and stays locked in place for
+the rest of the game. Up to 3 letters can be revealed per game. Results can't
+be shared in cheat mode.
 
 ## Mouse
 

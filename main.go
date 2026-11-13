@@ -16,6 +16,7 @@ func main() {
 	flag.BoolVar(&opts.Random, "random", false, "play a random word instead of today's puzzle")
 	flag.BoolVar(&opts.Hard, "hard", false, "hard mode: revealed hints must be used in later guesses")
 	flag.BoolVar(&opts.Colorblind, "colorblind", false, "high-contrast orange/blue colours")
+	flag.BoolVar(&opts.Cheat, "cheat", false, "casual mode: press ? to reveal up to 3 letters (disables sharing)")
 	flag.BoolVar(&opts.NoMouse, "no-mouse", false, "disable mouse support")
 	flag.Parse()
 

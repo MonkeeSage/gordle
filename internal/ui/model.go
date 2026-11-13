@@ -2,7 +2,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -21,6 +23,7 @@ type Options struct {
 	Hard       bool
 	Colorblind bool
 	NoMouse    bool
+	Cheat      bool // allow revealing up to game.MaxHints letters; disables sharing
 }
 
 // Model is the Bubble Tea model.
@@ -29,9 +32,11 @@ type Model struct {
 	pal  palette
 
 	game   *game.Game
-	puzzle int // daily puzzle number, 0 for random games
-	input  string
-	keys   [26]game.Mark // keyboard colours, updated once a reveal finishes
+	gen    int                // incremented per game so stale animation ticks are ignored
+	puzzle int                // daily puzzle number, 0 for random games
+	slots  [words.Length]byte // input row; 0 = empty, hinted letters are locked
+	pick   func(n int) int    // chooses hint positions; replaced in tests
+	keys   [26]game.Mark      // keyboard colours, updated once a reveal finishes
 
 	revealed int // tiles revealed in the newest row; words.Length when idle
 	shake    int // remaining shake frames for the input row
@@ -43,8 +48,8 @@ type Model struct {
 }
 
 type (
-	revealMsg      struct{}
-	shakeMsg       struct{}
+	revealMsg      struct{ gen int }
+	shakeMsg       struct{ gen int }
 	toastExpireMsg struct{ id int }
 	clickMsg       struct{ id string }
 	hoverMsg       struct{ id string }
@@ -58,9 +63,11 @@ const (
 
 var shakeOffsets = []int{0, 1, -1, 2, -2, 2, -2, 1, -1}
 
+const noHintsLeft = "Cheating got you half way there, but you must go on alone."
+
 // New creates a model and starts the first game.
 func New(opts Options) Model {
-	m := Model{opts: opts, pal: standardPalette}
+	m := Model{opts: opts, pal: standardPalette, pick: rand.IntN}
 	if opts.Colorblind {
 		m.pal = colorblindPalette
 	}
@@ -74,11 +81,42 @@ func New(opts Options) Model {
 
 func (m *Model) newGame(puzzle int, target string) {
 	m.game = game.New(target, maxGuesses, m.opts.Hard, words.IsValid)
+	m.gen++
 	m.puzzle = puzzle
-	m.input = ""
+	m.slots = [words.Length]byte{}
 	m.keys = [26]game.Mark{}
 	m.revealed = words.Length
 	m.toast = ""
+}
+
+// resetInput clears the input row, keeping hinted letters in place.
+func (m *Model) resetInput() {
+	m.slots = [words.Length]byte{}
+	for _, i := range m.game.Hints {
+		m.slots[i] = m.game.Target[i]
+	}
+}
+
+// inputWord returns the letters in the input row. It is shorter than
+// words.Length if any slot is empty.
+func (m Model) inputWord() string {
+	var b strings.Builder
+	for _, c := range m.slots {
+		if c != 0 {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+func (m Model) revealTick() tea.Cmd {
+	gen := m.gen
+	return tea.Tick(revealDelay, func(time.Time) tea.Msg { return revealMsg{gen} })
+}
+
+func (m Model) shakeTick() tea.Cmd {
+	gen := m.gen
+	return tea.Tick(shakeDelay, func(time.Time) tea.Msg { return shakeMsg{gen} })
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -101,16 +139,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hover = msg.id
 
 	case revealMsg:
+		if msg.gen != m.gen {
+			break
+		}
 		m.revealed++
 		if m.revealing() {
-			return m, tea.Tick(revealDelay, func(time.Time) tea.Msg { return revealMsg{} })
+			return m, m.revealTick()
 		}
 		m.keys = m.game.Letters()
 
 	case shakeMsg:
+		if msg.gen != m.gen {
+			break
+		}
 		m.shake--
 		if m.shake > 0 {
-			return m, tea.Tick(shakeDelay, func(time.Time) tea.Msg { return shakeMsg{} })
+			return m, m.shakeTick()
 		}
 
 	case toastExpireMsg:
@@ -125,14 +169,19 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch k := msg.String(); k {
 	case "ctrl+c", "esc":
 		return m, tea.Quit
+	case "ctrl+r":
+		return m.action("btn:new")
 	case "enter":
 		return m.action("key:enter")
 	case "backspace":
 		return m.action("key:back")
 	default:
+		if msg.Text == "?" {
+			return m.action("btn:hint")
+		}
 		if m.over() {
 			switch k {
-			case "n":
+			case "r", "n":
 				return m.action("btn:new")
 			case "s":
 				return m.action("btn:share")
@@ -155,12 +204,10 @@ func (m Model) action(id string) (tea.Model, tea.Cmd) {
 	case "btn:quit":
 		return m, tea.Quit
 	case "btn:new":
-		if m.over() {
-			m.newGame(0, words.Random())
-		}
+		m.newGame(0, words.Random())
 		return m, nil
 	case "btn:share":
-		if m.over() {
+		if m.over() && !m.opts.Cheat {
 			m, expire := m.showToast("Copied result to clipboard")
 			return m, tea.Batch(tea.SetClipboard(m.shareText()), expire)
 		}
@@ -171,30 +218,58 @@ func (m Model) action(id string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch id {
+	case "btn:hint":
+		return m.hint()
 	case "key:enter":
 		return m.submit()
 	case "key:back":
-		if m.input != "" {
-			m.input = m.input[:len(m.input)-1]
+		for i := len(m.slots) - 1; i >= 0; i-- {
+			if m.slots[i] != 0 && !m.game.Hinted(i) {
+				m.slots[i] = 0
+				break
+			}
 		}
 	default:
-		if l, ok := strings.CutPrefix(id, "key:"); ok && len(l) == 1 && len(m.input) < words.Length {
-			m.input += l
+		if l, ok := strings.CutPrefix(id, "key:"); ok && len(l) == 1 {
+			for i := range m.slots {
+				if m.slots[i] == 0 {
+					m.slots[i] = l[0]
+					break
+				}
+			}
 		}
 	}
 	return m, nil
 }
 
+// hint reveals a correct letter in the input row (cheat mode only). It
+// replaces whatever was typed in that position.
+func (m Model) hint() (tea.Model, tea.Cmd) {
+	if !m.opts.Cheat {
+		return m, nil
+	}
+	i, err := m.game.Hint(m.pick)
+	if errors.Is(err, game.ErrNoHints) {
+		return m.showToast(noHintsLeft)
+	}
+	if err != nil {
+		return m, nil
+	}
+	m.slots[i] = m.game.Target[i]
+	m.keys = m.game.Letters()
+	return m, nil
+}
+
 func (m Model) submit() (tea.Model, tea.Cmd) {
-	if _, err := m.game.Submit(m.input); err != nil {
+	if _, err := m.game.Submit(m.inputWord()); err != nil {
 		msg := err.Error()
 		m, expire := m.showToast(strings.ToUpper(msg[:1]) + msg[1:])
 		m.shake = len(shakeOffsets)
-		return m, tea.Batch(expire, tea.Tick(shakeDelay, func(time.Time) tea.Msg { return shakeMsg{} }))
+		return m, tea.Batch(expire, m.shakeTick())
 	}
-	m.input = ""
+	m.resetInput()
 	m.revealed = 0
-	return m, tea.Tick(revealDelay, func(time.Time) tea.Msg { return revealMsg{} })
+	return m, m.revealTick()
 }
 
 // showToast displays s and returns the command that will clear it. Newer
@@ -277,6 +352,9 @@ func (m Model) View() tea.View {
 	if m.game.Hard {
 		sub += " · hard"
 	}
+	if m.opts.Cheat {
+		sub += " · cheat"
+	}
 	title := lipgloss.NewStyle().Bold(true).Render("GORDLE") + "  " + dim.Render(sub)
 	layers = append(layers, lipgloss.NewLayer(title).X(center(lipgloss.Width(title))).Y(y))
 	y += 2
@@ -294,17 +372,25 @@ func (m Model) View() tea.View {
 		}
 		layers = append(layers, lipgloss.NewLayer(row).X(x).Y(y+r*(s.tileH+s.boardRowGap)))
 	}
+	if m.opts.Cheat && m.game.Status() == game.Playing {
+		btn := m.hintButton(len(m.game.Hints) >= game.MaxHints, m.hover == "btn:hint")
+		layers = append(layers, lipgloss.NewLayer(btn).ID("btn:hint").
+			X(center(s.boardW())+s.boardW()+2).Y(y+len(m.game.Guesses)*(s.tileH+s.boardRowGap)))
+	}
 	y += s.boardH() + 1
 
 	// Status line and end-of-game buttons.
 	if line := m.statusLine(); line != "" {
-		line = lipgloss.NewStyle().Bold(true).Render(line)
-		layers = append(layers, lipgloss.NewLayer(line).X(center(lipgloss.Width(line))).Y(y))
+		// Long toasts wrap onto the buttons' line, which is free during play.
+		line = lipgloss.NewStyle().Bold(true).Width(contentW).Align(lipgloss.Center).Render(line)
+		layers = append(layers, lipgloss.NewLayer(line).Y(y))
 	}
 	if m.over() {
-		btns := []struct{ id, label string }{
-			{"btn:new", "New game (n)"}, {"btn:share", "Share (s)"}, {"btn:quit", "Quit (q)"},
+		btns := []struct{ id, label string }{{"btn:new", "New game (r)"}}
+		if !m.opts.Cheat {
+			btns = append(btns, struct{ id, label string }{"btn:share", "Share (s)"})
 		}
+		btns = append(btns, struct{ id, label string }{"btn:quit", "Quit (q)"})
 		rendered := make([]string, len(btns))
 		total := 2 * (len(btns) - 1)
 		for i, b := range btns {
@@ -350,7 +436,11 @@ func (m Model) View() tea.View {
 	y += s.kbH()
 
 	if m.height >= y+2 {
-		help := dim.Render("type or click the keys · esc to quit")
+		items := []string{"ctrl+r restart", "esc quit"}
+		if m.opts.Cheat {
+			items = append([]string{"? hint"}, items...)
+		}
+		help := dim.Render(strings.Join(items, " · "))
 		layers = append(layers, lipgloss.NewLayer(help).X(center(lipgloss.Width(help))).Y(y+1))
 		y += 2
 	}
@@ -393,8 +483,11 @@ func (m Model) boardTile(r, c int) string {
 			return m.tile(gs[r].Word[c], tileRevealed, gs[r].Marks[c])
 		}
 		return m.tile(gs[r].Word[c], tileTyped, game.Unknown)
-	case r == len(gs) && m.game.Status() == game.Playing && c < len(m.input):
-		return m.tile(m.input[c], tileTyped, game.Unknown)
+	case r == len(gs) && m.game.Status() == game.Playing && m.slots[c] != 0:
+		if m.game.Hinted(c) {
+			return m.tile(m.slots[c], tileRevealed, game.Correct)
+		}
+		return m.tile(m.slots[c], tileTyped, game.Unknown)
 	}
 	return m.tile(0, tileEmpty, game.Unknown)
 }

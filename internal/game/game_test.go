@@ -126,3 +126,74 @@ func TestLetters(t *testing.T) {
 		}
 	}
 }
+
+func TestHint(t *testing.T) {
+	g := New("crane", 6, false, allValid)
+	g.Submit("trace") // R, A and E are already green
+
+	first := func(int) int { return 0 }
+	// Only C (0) and N (3) are unsolved, so they come first.
+	for _, want := range []int{0, 3} {
+		i, err := g.Hint(first)
+		if err != nil || i != want {
+			t.Fatalf("Hint() = %d, %v; want %d", i, err, want)
+		}
+	}
+	// With everything solved or hinted, already-green positions are used.
+	if i, err := g.Hint(first); err != nil || i != 1 {
+		t.Fatalf("third Hint() = %d, %v; want 1", i, err)
+	}
+	if _, err := g.Hint(first); !errors.Is(err, ErrNoHints) {
+		t.Fatalf("fourth Hint(): err = %v, want ErrNoHints", err)
+	}
+	if !g.Hinted(3) || g.Hinted(2) {
+		t.Errorf("Hinted reports wrong positions: %v", g.Hints)
+	}
+	if l := g.Letters(); l['n'-'a'] != Correct {
+		t.Errorf("hinted N not green in Letters: %v", l['n'-'a'])
+	}
+
+	g.Submit("crane")
+	if _, err := g.Hint(first); !errors.Is(err, ErrGameOver) {
+		t.Errorf("Hint after win: err = %v, want ErrGameOver", err)
+	}
+}
+
+func TestHintRepeatedLetter(t *testing.T) {
+	g := New("truth", 6, false, allValid)
+	// at picks position pos, given no guesses yet: candidates are then the
+	// unhinted positions in order.
+	at := func(pos int) func(int) int {
+		return func(int) int {
+			n := 0
+			for i := range pos {
+				if !g.Hinted(i) {
+					n++
+				}
+			}
+			return n
+		}
+	}
+	key := func() Mark { return g.Letters()['t'-'a'] }
+
+	g.Hint(at(0)) // first T
+	if key() != Present {
+		t.Fatalf("T with another T unrevealed = %v, want Present", key())
+	}
+	g.Hint(at(4)) // H doesn't change T
+	if key() != Present {
+		t.Fatalf("T after hinting H = %v, want Present", key())
+	}
+	g.Hint(at(3)) // second T
+	if key() != Correct {
+		t.Fatalf("T with both Ts revealed = %v, want Correct", key())
+	}
+
+	// A guess solving the other T also completes it.
+	g = New("truth", 6, false, allValid)
+	g.Hint(at(0))
+	g.Submit("forth") // T green at position 3
+	if key() != Correct {
+		t.Errorf("T after a guess solved the other T = %v, want Correct", key())
+	}
+}

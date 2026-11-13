@@ -137,3 +137,18 @@ func (m Model) button(label string, hovered bool) string {
 	st := lipgloss.NewStyle().Foreground(m.pal.text).Background(bg)
 	return block(label, lipgloss.Width(label)+2, 1, st)
 }
+
+// hintButton is the cheat-mode "?" button beside the input row. It is
+// dimmed once all hints are used.
+func (m Model) hintButton(exhausted, hovered bool) string {
+	s := m.sizing()
+	bg := m.pal.present
+	if exhausted {
+		bg = m.pal.absent
+	}
+	if hovered {
+		bg = lipgloss.Lighten(bg, 0.25)
+	}
+	st := lipgloss.NewStyle().Bold(true).Foreground(m.pal.text).Background(bg)
+	return block("?", s.tileW, s.tileH, st)
+}
