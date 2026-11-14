@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -123,17 +124,49 @@ func TestMouseHitTesting(t *testing.T) {
 	}
 }
 
-func TestShareToastExpires(t *testing.T) {
+func TestShare(t *testing.T) {
 	m := newTestModel(80, 40, "crane")
+	var copied string
+	m.copyText = func(s string) error { copied = s; return nil }
+	m = typeWord(m, "slate")
 	m = typeWord(m, "crane")
-	next, _ := m.action("btn:share")
-	m = next.(Model)
-	if m.toast == "" {
-		t.Fatal("no toast after share")
+
+	_, cmd := m.action("btn:share")
+	if cmd == nil {
+		t.Fatal("share returned no command")
+	}
+	// Run the batch: one OSC 52 command and one native copy.
+	var copiedResult tea.Msg
+	for _, c := range cmd().(tea.BatchMsg) {
+		if msg, ok := c().(copiedMsg); ok {
+			copiedResult = msg
+		}
+	}
+	want := "Gordle (random) 2/6\n\n⬛⬛🟩⬛🟩\n🟩🟩🟩🟩🟩"
+	if copied != want {
+		t.Errorf("native clipboard got %q, want %q", copied, want)
+	}
+	if copiedResult == nil {
+		t.Fatal("no copiedMsg from share")
+	}
+
+	m = send(m, copiedResult)
+	if m.toast != "Copied result to clipboard" {
+		t.Errorf("toast = %q", m.toast)
 	}
 	m = send(m, toastExpireMsg{m.toastID})
 	if m.toast != "" {
 		t.Errorf("toast %q did not expire", m.toast)
+	}
+}
+
+func TestCopiedToast(t *testing.T) {
+	fail := errors.New("no tool")
+	if got := copiedToast(fail, true); !strings.Contains(got, "set-clipboard on") {
+		t.Errorf("tmux failure toast = %q", got)
+	}
+	if got := copiedToast(fail, false); !strings.Contains(got, "OSC 52") {
+		t.Errorf("non-tmux failure toast = %q", got)
 	}
 }
 

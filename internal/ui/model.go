@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"gordle/internal/clipboard"
 	"gordle/internal/game"
 	"gordle/internal/words"
 )
@@ -31,12 +33,13 @@ type Model struct {
 	opts Options
 	pal  palette
 
-	game   *game.Game
-	gen    int                // incremented per game so stale animation ticks are ignored
-	puzzle int                // daily puzzle number, 0 for random games
-	slots  [words.Length]byte // input row; 0 = empty, hinted letters are locked
-	pick   func(n int) int    // chooses hint positions; replaced in tests
-	keys   [26]game.Mark      // keyboard colours, updated once a reveal finishes
+	game     *game.Game
+	gen      int                // incremented per game so stale animation ticks are ignored
+	puzzle   int                // daily puzzle number, 0 for random games
+	slots    [words.Length]byte // input row; 0 = empty, hinted letters are locked
+	pick     func(n int) int    // chooses hint positions; replaced in tests
+	copyText func(string) error // native clipboard copy; replaced in tests
+	keys     [26]game.Mark      // keyboard colours, updated once a reveal finishes
 
 	revealed int // tiles revealed in the newest row; words.Length when idle
 	shake    int // remaining shake frames for the input row
@@ -52,6 +55,7 @@ type (
 	shakeMsg       struct{ gen int }
 	toastExpireMsg struct{ id int }
 	clickMsg       struct{ id string }
+	copiedMsg      struct{ err error }
 	hoverMsg       struct{ id string }
 )
 
@@ -67,7 +71,7 @@ const noHintsLeft = "Cheating got you half way there, but you must go on alone."
 
 // New creates a model and starts the first game.
 func New(opts Options) Model {
-	m := Model{opts: opts, pal: standardPalette, pick: rand.IntN}
+	m := Model{opts: opts, pal: standardPalette, pick: rand.IntN, copyText: clipboard.Copy}
 	if opts.Colorblind {
 		m.pal = colorblindPalette
 	}
@@ -157,6 +161,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.shakeTick()
 		}
 
+	case copiedMsg:
+		return m.showToast(copiedToast(msg.err, os.Getenv("TMUX") != ""))
+
 	case toastExpireMsg:
 		if msg.id == m.toastID {
 			m.toast = ""
@@ -208,8 +215,12 @@ func (m Model) action(id string) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "btn:share":
 		if m.over() && !m.opts.Cheat {
-			m, expire := m.showToast("Copied result to clipboard")
-			return m, tea.Batch(tea.SetClipboard(m.shareText()), expire)
+			// OSC 52 covers SSH sessions; the native tool covers terminals and
+			// tmux setups that ignore OSC 52. The result picks the message.
+			text, copyText := m.shareText(), m.copyText
+			return m, tea.Batch(tea.SetClipboard(text), func() tea.Msg {
+				return copiedMsg{copyText(text)}
+			})
 		}
 		return m, nil
 	}
@@ -295,6 +306,19 @@ func (m Model) shareText() string {
 		name = fmt.Sprintf("Gordle #%d", m.puzzle)
 	}
 	return fmt.Sprintf("%s %s/%d%s\n\n%s", name, score, maxGuesses, hard, m.game.Share())
+}
+
+// copiedToast describes the outcome of sharing. When the native copy fails
+// only OSC 52 is left, which can't report success, and which tmux drops by
+// default.
+func copiedToast(err error, inTmux bool) string {
+	switch {
+	case err == nil:
+		return "Copied result to clipboard"
+	case inTmux:
+		return "No clipboard tool found; in tmux, copying needs set-clipboard on"
+	}
+	return "Sent result to the terminal clipboard (OSC 52)"
 }
 
 var praise = []string{"Genius!", "Magnificent!", "Impressive!", "Splendid!", "Great!", "Phew!"}

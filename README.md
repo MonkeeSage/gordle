@@ -34,9 +34,15 @@ The on-screen keyboard and the end-of-game buttons are clickable, and keys
 highlight on hover. Any terminal with SGR mouse reporting works (xterm, kitty,
 WezTerm, Alacritty, foot, iTerm2, Windows Terminal, ...).
 
-Under tmux, mouse events are only forwarded with `set -g mouse on`, and
-copying the result to the system clipboard (OSC 52) needs
-`set -g set-clipboard on`.
+Under tmux, mouse events are only forwarded with `set -g mouse on`.
+
+## Sharing
+
+Share copies the result with the desktop's clipboard tool (`wl-copy`,
+`xclip` or `xsel` on Linux, `pbcopy` on macOS, `clip.exe` on Windows/WSL),
+and also sends it as an OSC 52 terminal sequence, which covers SSH sessions
+without a local clipboard. tmux drops OSC 52 from programs unless
+`set -g set-clipboard on` is set.
 
 ## Layout
 
