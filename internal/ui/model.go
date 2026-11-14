@@ -302,7 +302,7 @@ func (m Model) shareText() string {
 	if m.game.Hard {
 		hard = "*"
 	}
-	return fmt.Sprintf("Gordle %s %s/%d%s\n\n%s", m.puzzle.ID(), score, maxGuesses, hard, m.game.Share())
+	return fmt.Sprintf("Gordle %s %s/%d%s\n\n%s\n%s", m.puzzle.ID(), score, maxGuesses, hard, m.game.Share(), repoURL)
 }
 
 // copiedToast describes the outcome of sharing. When the native copy fails
@@ -317,6 +317,9 @@ func copiedToast(err error, inTmux bool) string {
 	}
 	return "Sent result to the terminal clipboard (OSC 52)"
 }
+
+// repoURL ends the shared result so others can find the game.
+const repoURL = "https://github.com/MonkeeSage/gordle"
 
 var praise = []string{"Genius!", "Magnificent!", "Impressive!", "Splendid!", "Great!", "Phew!"}
 

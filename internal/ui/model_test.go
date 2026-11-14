@@ -142,7 +142,7 @@ func TestShare(t *testing.T) {
 			copiedResult = msg
 		}
 	}
-	want := "Gordle R-TST 2/6\n\n⬛⬛🟩⬛🟩\n🟩🟩🟩🟩🟩"
+	want := "Gordle R-TST 2/6\n\n⬛⬛🟩⬛🟩\n🟩🟩🟩🟩🟩\nhttps://github.com/MonkeeSage/gordle"
 	if copied != want {
 		t.Errorf("native clipboard got %q, want %q", copied, want)
 	}
