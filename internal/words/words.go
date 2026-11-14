@@ -46,20 +46,6 @@ func IsValid(w string) bool {
 // Count returns the number of possible answers.
 func Count() int { return len(answers) }
 
-// Random returns a random answer.
-func Random() string {
-	return answers[rand.IntN(len(answers))]
-}
-
-// Daily returns the puzzle number and answer for the calendar day of t
-// (in t's location). Everyone playing on the same date gets the same word.
-func Daily(t time.Time) (int, string) {
-	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
-	n := int(day.Sub(epoch).Hours()/24) + 1
-	i := ((n-1)%len(answers) + len(answers)) % len(answers)
-	return n, answers[dailyOrder[i]]
-}
-
 func toSet(ws []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(ws))
 	for _, w := range ws {

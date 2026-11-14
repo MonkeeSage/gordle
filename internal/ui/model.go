@@ -21,7 +21,7 @@ const maxGuesses = 6
 
 // Options configure a session.
 type Options struct {
-	Random     bool // start with a random word instead of today's puzzle
+	Puzzle     words.Puzzle // first game to play; today's daily puzzle if zero
 	Hard       bool
 	Colorblind bool
 	NoMouse    bool
@@ -34,8 +34,8 @@ type Model struct {
 	pal  palette
 
 	game     *game.Game
-	gen      int                // incremented per game so stale animation ticks are ignored
-	puzzle   int                // daily puzzle number, 0 for random games
+	gen      int // incremented per game so stale animation ticks are ignored
+	puzzle   words.Puzzle
 	slots    [words.Length]byte // input row; 0 = empty, hinted letters are locked
 	pick     func(n int) int    // chooses hint positions; replaced in tests
 	copyText func(string) error // native clipboard copy; replaced in tests
@@ -75,16 +75,16 @@ func New(opts Options) Model {
 	if opts.Colorblind {
 		m.pal = colorblindPalette
 	}
-	if opts.Random {
-		m.newGame(0, words.Random())
+	if opts.Puzzle.Word != "" {
+		m.newGame(opts.Puzzle)
 	} else {
 		m.newGame(words.Daily(time.Now()))
 	}
 	return m
 }
 
-func (m *Model) newGame(puzzle int, target string) {
-	m.game = game.New(target, maxGuesses, m.opts.Hard, words.IsValid)
+func (m *Model) newGame(puzzle words.Puzzle) {
+	m.game = game.New(puzzle.Word, maxGuesses, m.opts.Hard, words.IsValid)
 	m.gen++
 	m.puzzle = puzzle
 	m.slots = [words.Length]byte{}
@@ -211,7 +211,7 @@ func (m Model) action(id string) (tea.Model, tea.Cmd) {
 	case "btn:quit":
 		return m, tea.Quit
 	case "btn:new":
-		m.newGame(0, words.Random())
+		m.newGame(words.Random())
 		return m, nil
 	case "btn:share":
 		if m.over() && !m.opts.Cheat {
@@ -301,11 +301,7 @@ func (m Model) shareText() string {
 	if m.game.Hard {
 		hard = "*"
 	}
-	name := "Gordle (random)"
-	if m.puzzle > 0 {
-		name = fmt.Sprintf("Gordle #%d", m.puzzle)
-	}
-	return fmt.Sprintf("%s %s/%d%s\n\n%s", name, score, maxGuesses, hard, m.game.Share())
+	return fmt.Sprintf("Gordle %s %s/%d%s\n\n%s", m.puzzle.ID(), score, maxGuesses, hard, m.game.Share())
 }
 
 // copiedToast describes the outcome of sharing. When the native copy fails
@@ -369,9 +365,9 @@ func (m Model) View() tea.View {
 	y := 0
 
 	// Title.
-	sub := "daily #" + fmt.Sprint(m.puzzle)
-	if m.puzzle == 0 {
-		sub = "random"
+	sub := "random " + m.puzzle.ID()
+	if m.puzzle.Number > 0 {
+		sub = "daily " + m.puzzle.ID()
 	}
 	if m.game.Hard {
 		sub += " · hard"

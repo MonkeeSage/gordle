@@ -11,6 +11,7 @@ go build && ./gordle
 | Flag | |
 |---|---|
 | `-random` | play a random word instead of today's daily puzzle |
+| `-game ID` | replay a shared game, e.g. `-game 317` or `-game R-K7Q` |
 | `-hard` | hard mode: greens must stay put, yellows must be reused |
 | `-cheat` | casual mode: reveal up to 3 letters with `?` (disables sharing) |
 | `-colorblind` | orange/blue instead of green/yellow |
@@ -37,6 +38,13 @@ WezTerm, Alacritty, foot, iTerm2, Windows Terminal, ...).
 Under tmux, mouse events are only forwarded with `set -g mouse on`.
 
 ## Sharing
+
+Every game has an ID, shown in the title and at the start of the shared
+result: daily puzzles are numbered (`#317`) and random games get a code
+(`R-K7Q`). Anyone can play the same word with `gordle -game <ID>`. Codes are
+case-insensitive and the dash is optional. Future daily puzzles can't be
+played early. IDs depend on the embedded word list, so regenerating the
+lists changes which word an ID refers to.
 
 Share copies the result with the desktop's clipboard tool (`wl-copy`,
 `xclip` or `xsel` on Linux, `pbcopy` on macOS, `clip.exe` on Windows/WSL),

@@ -13,12 +13,12 @@ import (
 )
 
 func newTestModel(w, h int, target string) Model {
-	return newTestModelOpts(w, h, target, Options{Random: true})
+	return newTestModelOpts(w, h, target, Options{})
 }
 
 func newTestModelOpts(w, h int, target string, opts Options) Model {
 	m := New(opts)
-	m.newGame(0, target)
+	m.newGame(words.Puzzle{Code: "R-TST", Word: target})
 	m.width, m.height = w, h
 	return m
 }
@@ -67,7 +67,7 @@ func TestPlayThrough(t *testing.T) {
 	if !m.over() || m.statusLine() != "Magnificent!" {
 		t.Errorf("after win: over=%v status=%q", m.over(), m.statusLine())
 	}
-	if got := m.shareText(); !strings.HasPrefix(got, "Gordle (random) 2/6\n\n") {
+	if got := m.shareText(); !strings.HasPrefix(got, "Gordle R-TST 2/6\n\n") {
 		t.Errorf("share text = %q", got)
 	}
 }
@@ -142,7 +142,7 @@ func TestShare(t *testing.T) {
 			copiedResult = msg
 		}
 	}
-	want := "Gordle (random) 2/6\n\n⬛⬛🟩⬛🟩\n🟩🟩🟩🟩🟩"
+	want := "Gordle R-TST 2/6\n\n⬛⬛🟩⬛🟩\n🟩🟩🟩🟩🟩"
 	if copied != want {
 		t.Errorf("native clipboard got %q, want %q", copied, want)
 	}
@@ -176,7 +176,7 @@ func screenHas(m Model, s string) bool {
 }
 
 func TestCheatMode(t *testing.T) {
-	m := newTestModelOpts(80, 40, "crane", Options{Random: true, Cheat: true})
+	m := newTestModelOpts(80, 40, "crane", Options{Cheat: true})
 	m.pick = func(int) int { return 0 } // always the first candidate position
 	backspace := tea.KeyPressMsg{Code: tea.KeyBackspace}
 
@@ -228,7 +228,7 @@ func TestCheatMode(t *testing.T) {
 
 func TestHintButtonClick(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{80, 40}, {50, 24}} {
-		m := newTestModelOpts(size.w, size.h, "crane", Options{Random: true, Cheat: true})
+		m := newTestModelOpts(size.w, size.h, "crane", Options{Cheat: true})
 		v := m.View()
 		lines := strings.Split(ansi.Strip(v.Content), "\n")
 		found := false
@@ -285,7 +285,7 @@ func TestRestart(t *testing.T) {
 }
 
 func TestHintKeyColourWithRepeatedLetter(t *testing.T) {
-	m := newTestModelOpts(80, 40, "truth", Options{Random: true, Cheat: true})
+	m := newTestModelOpts(80, 40, "truth", Options{Cheat: true})
 	m.pick = func(int) int { return 0 }
 	m = send(m, clickMsg{"btn:hint"}, clickMsg{"btn:hint"}, clickMsg{"btn:hint"}) // T, R, U
 	if m.slots != [5]byte{'t', 'r', 'u'} {
@@ -296,5 +296,29 @@ func TestHintKeyColourWithRepeatedLetter(t *testing.T) {
 	}
 	if got := m.keys['r'-'a']; got != game.Correct {
 		t.Errorf("R key = %v, want Correct", got)
+	}
+}
+
+func TestGameIDShown(t *testing.T) {
+	daily := words.Puzzle{Number: 317, Word: "crane"}
+	random := words.Puzzle{Code: "R-K7Q", Word: "crane"}
+	for _, tt := range []struct {
+		p            words.Puzzle
+		title, share string
+	}{
+		{daily, "daily #317", "Gordle #317 1/6"},
+		{random, "random R-K7Q", "Gordle R-K7Q 1/6"},
+	} {
+		for _, size := range []struct{ w, h int }{{80, 40}, {45, 22}} {
+			m := New(Options{Puzzle: tt.p})
+			m.width, m.height = size.w, size.h
+			if !screenHas(m, tt.title) {
+				t.Errorf("%dx%d: title %q not on screen", size.w, size.h, tt.title)
+			}
+			m = typeWord(m, "crane")
+			if got := m.shareText(); !strings.HasPrefix(got, tt.share+"\n") {
+				t.Errorf("share text = %q, want prefix %q", got, tt.share)
+			}
+		}
 	}
 }
