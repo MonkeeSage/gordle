@@ -13,11 +13,15 @@ import (
 	"gordle/internal/words"
 )
 
+// version is set at release build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	var (
-		opts   ui.Options
-		random bool
-		gameID string
+		opts        ui.Options
+		random      bool
+		gameID      string
+		showVersion bool
 	)
 	flag.BoolVar(&random, "random", false, "play a random word instead of today's puzzle")
 	flag.StringVar(&gameID, "game", "", "replay a shared game by its ID, e.g. 317 or R-K7Q")
@@ -25,7 +29,13 @@ func main() {
 	flag.BoolVar(&opts.Colorblind, "colorblind", false, "high-contrast orange/blue colours")
 	flag.BoolVar(&opts.Cheat, "cheat", false, "casual mode: press ? to reveal up to 3 letters (disables sharing)")
 	flag.BoolVar(&opts.NoMouse, "no-mouse", false, "disable mouse support")
+	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println("gordle", version)
+		return
+	}
 
 	switch {
 	case random && gameID != "":

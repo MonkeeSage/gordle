@@ -4,9 +4,19 @@ A Wordle-style word game for the terminal, written in Go with
 [Bubble Tea](https://github.com/charmbracelet/bubbletea) and
 [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
+### Download
+
+Binaries built by a [github workflow](.github/workflows/release.yml) can be downloaded from the [releases page](https://github.com/MonkeeSage/gordle/releases).
+
+Note: See [Releases](#Releases) for the command to allow the binary to run on macOS.
+
+### Build
+
 ```
 go build && ./gordle
 ```
+
+### Flags
 
 | Flag | |
 |---|---|
@@ -52,10 +62,31 @@ and also sends it as an OSC 52 terminal sequence, which covers SSH sessions
 without a local clipboard. tmux drops OSC 52 from programs unless
 `set -g set-clipboard on` is set.
 
-## Layout
+## Word list
 
-The board scales to the terminal: large 5x3 tiles from 63x35, compact tiles
-down to 45x22.
+`internal/words/answers.txt` (about 2,000 common words, no plurals or
+inflections) and `valid.txt` (about 11,000 accepted guesses) are generated
+from [SCOWL](http://wordlist.aspell.net/) and embedded with `go:embed`.
+To regenerate them from an extracted SCOWL release:
+
+```
+SCOWL=/path/to/scowl-2020.12.07 go generate ./internal/words
+```
+
+Words in `tools/genwords/exclude.txt` are never chosen as answers (they're
+still accepted as guesses). SCOWL's license is in
+`internal/words/SCOWL-COPYRIGHT`.
+
+## Releases
+
+Pushing a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) runs
+the [release workflow](.github/workflows/release.yml): it tests, builds
+`gordle` for Linux, macOS and Windows on amd64 and arm64, and publishes a
+GitHub release with the archives and a `SHA256SUMS` file. `gordle-solver` is
+not included. `gordle -version` prints the version a binary was built from.
+
+The macOS binaries aren't signed, so Gatekeeper blocks them at first; allow
+them with `xattr -d com.apple.quarantine gordle`.
 
 ## gordle-solver
 
@@ -79,18 +110,3 @@ starting words. `-colorblind` and `-no-mouse` work as in gordle.
 
 A gray letter that is also green or yellow limits how many copies the
 answer can have, matching how Wordle reports repeated letters.
-
-
-
-`internal/words/answers.txt` (about 2,000 common words, no plurals or
-inflections) and `valid.txt` (about 11,000 accepted guesses) are generated
-from [SCOWL](http://wordlist.aspell.net/) and embedded with `go:embed`.
-To regenerate them from an extracted SCOWL release:
-
-```
-SCOWL=/path/to/scowl-2020.12.07 go generate ./internal/words
-```
-
-Words in `tools/genwords/exclude.txt` are never chosen as answers (they're
-still accepted as guesses). SCOWL's license is in
-`internal/words/SCOWL-COPYRIGHT`.
