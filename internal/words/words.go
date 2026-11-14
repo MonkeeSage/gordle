@@ -11,6 +11,7 @@ package words
 import (
 	_ "embed"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 )
@@ -45,6 +46,9 @@ func IsValid(w string) bool {
 
 // Count returns the number of possible answers.
 func Count() int { return len(answers) }
+
+// Answers returns a copy of the possible answers, in alphabetical order.
+func Answers() []string { return slices.Clone(answers) }
 
 func toSet(ws []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(ws))

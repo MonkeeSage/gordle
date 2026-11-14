@@ -57,7 +57,30 @@ without a local clipboard. tmux drops OSC 52 from programs unless
 The board scales to the terminal: large 5x3 tiles from 63x35, compact tiles
 down to 45x22.
 
-## Word lists
+## gordle-solver
+
+A companion tool that lists the answers still possible given what you know.
+
+```
+go build ./cmd/gordle-solver && ./gordle-solver
+```
+
+Fill in the **Correct** row (green letters, one per box), the **Misplaced**
+row (yellow letters; a box can hold several, e.g. "not E or A here") and the
+**Excluded** field (gray letters), then press **Solve** (`ctrl+s`, `Enter` or
+click). Candidates are listed best guess first, ranked by how many of the
+remaining candidates share their letters, with known letters highlighted.
+
+Click a box or use `Tab`/`Shift+Tab` and the arrow keys to move between
+inputs; `Backspace` deletes a letter, `Delete` clears a box, `ctrl+r` clears
+everything, and `PgUp`/`PgDn` or the mouse wheel scroll the results. Solving
+with nothing filled in ranks every answer, which makes a good list of
+starting words. `-colorblind` and `-no-mouse` work as in gordle.
+
+A gray letter that is also green or yellow limits how many copies the
+answer can have, matching how Wordle reports repeated letters.
+
+
 
 `internal/words/answers.txt` (about 2,000 common words, no plurals or
 inflections) and `valid.txt` (about 11,000 accepted guesses) are generated

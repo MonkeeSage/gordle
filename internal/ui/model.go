@@ -14,6 +14,7 @@ import (
 
 	"gordle/internal/clipboard"
 	"gordle/internal/game"
+	"gordle/internal/theme"
 	"gordle/internal/words"
 )
 
@@ -31,7 +32,7 @@ type Options struct {
 // Model is the Bubble Tea model.
 type Model struct {
 	opts Options
-	pal  palette
+	pal  theme.Palette
 
 	game     *game.Game
 	gen      int // incremented per game so stale animation ticks are ignored
@@ -71,9 +72,9 @@ const noHintsLeft = "Cheating got you half way there, but you must go on alone."
 
 // New creates a model and starts the first game.
 func New(opts Options) Model {
-	m := Model{opts: opts, pal: standardPalette, pick: rand.IntN, copyText: clipboard.Copy}
+	m := Model{opts: opts, pal: theme.Standard, pick: rand.IntN, copyText: clipboard.Copy}
 	if opts.Colorblind {
-		m.pal = colorblindPalette
+		m.pal = theme.Colorblind
 	}
 	if opts.Puzzle.Word != "" {
 		m.newGame(opts.Puzzle)
@@ -355,7 +356,7 @@ func (m Model) View() tea.View {
 	}
 
 	s := m.sizing()
-	dim := lipgloss.NewStyle().Foreground(m.pal.dim)
+	dim := lipgloss.NewStyle().Foreground(m.pal.Dim)
 	var layers []*lipgloss.Layer
 
 	kbRows := []string{"qwertyuiop", "asdfghjkl", "zxcvbnm"}
@@ -414,7 +415,7 @@ func (m Model) View() tea.View {
 		rendered := make([]string, len(btns))
 		total := 2 * (len(btns) - 1)
 		for i, b := range btns {
-			rendered[i] = m.button(b.label, m.hover == b.id)
+			rendered[i] = m.pal.Button(b.label, m.hover == b.id)
 			total += lipgloss.Width(rendered[i])
 		}
 		x := center(total)
